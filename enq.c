@@ -1,5 +1,3 @@
-#include <string.h>
-
 #include "def.h"
 
 void help() {
@@ -10,15 +8,6 @@ void help() {
           );
 }
 
-struct command *create_cmd( int type, int pri, int uid, int argc, char *argv[] ) {
-    struct command *cmd = malloc(sizeof(struct command));
-    cmd->info = type;
-    cmd->pri = pri;
-    cmd->owner = uid;
-    cmd->argc = argc;
-    cmd->argv = argv;
-    return cmd;
-}
 
 int main(int argc, char *argv[]) {
     int buf;
@@ -44,10 +33,9 @@ int main(int argc, char *argv[]) {
     
     cmd = create_cmd( TYPE_ENQ, pri, getuid(), argc, argv ); 
 
-    if ( (buf = open("buf", O_WRONLY )) < 0 ) 
-        ERROR("enq open fifo failed");
-    if ( write(buf, cmd, CMDSIZE) < 0 )
-        ERROR("enq write failed");
+    ERRORIF( (buf = open("buf", O_WRONLY )) < 0, "enq open fifo failed" );
+    ERRORIF( write(buf, cmd, CMDSIZE) < 0, "enq write failed" );
+
     close(buf);
 
     return 0;

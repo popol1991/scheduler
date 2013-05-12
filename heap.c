@@ -8,10 +8,11 @@
 #define false   0
 
 
-struct heap *create_heap(int (*compare)(void*, void*)) {
+struct heap *create_heap(int (*compare)(void*, void*), void (*destruct)(void*)) {
     struct heap *hp = malloc(sizeof(struct heap));
     int DEFAULTMAX = 64;
     hp->compare = compare;
+    hp->destruct = destruct == NULL ? free : destruct;
     hp->heap = malloc(sizeof(void *[DEFAULTMAX]));
     hp->max = DEFAULTMAX;
     hp->count = 0;
@@ -59,8 +60,8 @@ void *peek(struct heap *hp) {
     return NULL;
 }
 
-void min_heapify(struct heap *hp) {
-    unsigned pos = 1;
+void min_heapify(struct heap *hp, int index) {
+    unsigned pos = index + 1;
     while ((pos * 2 < hp->count && hp->compare(hp->heap[pos-1], hp->heap[pos*2]) > 0) ||
             (pos*2 -1 < hp->count && hp->compare(hp->heap[pos-1], hp->heap[pos*2 - 1]) > 0)) {
         void *buffer;
@@ -85,10 +86,30 @@ void *pop(struct heap *hp) {
     void *top = hp->heap[0];
     hp->heap[0] = hp->heap[hp->count];
     hp->heap[hp->count] = NULL;
-    min_heapify(hp);
+    min_heapify(hp, 0);
     return top;
+}
+
+void remove_if(struct heap* hp, int (*to_remove)(void*)) {
+    int i;
+    for (i = 0; i < hp->count; i++) {
+        if ( to_remove(hp->heap[i]) ) {
+            hp->count--;
+            hp->destruct(hp->heap[i]);
+            hp->heap[i] = hp->heap[hp->count];
+            hp->heap[hp->count] = NULL;
+            min_heapify(hp, i);
+        }
+    }
 }
 
 unsigned size(struct heap *hp) {
     return hp->count;
+}
+
+void traverse(struct heap* hp, void (*func)(void*)) {
+    int i;
+    for (i = 0; i < hp->count; i++) {
+        func( hp->heap[i] );
+    }
 }
