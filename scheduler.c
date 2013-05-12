@@ -62,10 +62,17 @@ int main() {
 
 void sig_handler(int sig, siginfo_t *info, void *oldact) {
     int status, ret; 
-    DEBUG("get signal");
+    jobinfo j;
+
+#ifdef DEBUG_INFO
+    for (ret = 0; ret < size(wait_q); ret++) {
+        j = (jobinfo) wait_q->heap[ret];
+        printf("jid: %d, priority: %d\n", j->jid, j->current_pri);
+    }
+#endif
+
     switch (sig) {
         case SIGVTALRM:
-            DEBUG("time signal");
             schedule();
             break;
         case SIGCHLD:
@@ -92,11 +99,10 @@ void schedule() {
     int len = 0;
     memset(&cmd, 0, CMDSIZE);
 
-    ERRORIF( (len = read(fifo, &cmd, CMDSIZE)) < 0, "read fifo failed");
-    DEBUG("updating");
     // update job list
     update_joblist();
-    DEBUG("update finished");
+    
+    ERRORIF( (len = read(fifo, &cmd, CMDSIZE)) < 0, "read fifo failed");
 #ifdef DEBUG_INFO 
     if (len != 0) {
         printf("cmd type: %d\n", cmd.info);
@@ -134,11 +140,7 @@ void job_switch() {
     int i;
     
     if (current && current->state & STATE_DONE) {
-        for (i = 0; current->argv[i] != NULL; i++) {
-            free( current->argv[i]);
-        }
-        free(current->argv);
-        free(current);
+        job_destruct( current );
         current = NULL;
     }
 
@@ -163,7 +165,7 @@ void job_switch() {
 
     current = next;
     current->state = STATE_RUNNING;
-    printf("send SIGGONT to pid: %d\n", current->pid);
+    printf("send SIGCONT to pid: %d\n", current->pid);
     kill(current->pid, SIGCONT);
 
 }
@@ -203,11 +205,8 @@ jobinfo cmd2job(struct command *cmd) {
 void enqueue(struct command *cmd) {
     pid_t pid;
     
-    DEBUG("convert cmd 2 job");
     jobinfo job = cmd2job( cmd );
-    DEBUG("conversion finished, insert into wait_q");
     insert(wait_q, job);
-    DEBUG("insertion finished");
 
     child_start = 0;
     signal(SIGUSR1, toggle_child_start);
@@ -228,7 +227,6 @@ void enqueue(struct command *cmd) {
         job->pid = pid;
         printf("pid: %d\n", job->pid);
     }
-    DEBUG("fork finished");
 }
 
 int to_remove( jobinfo job ) {
@@ -240,11 +238,13 @@ int to_remove( jobinfo job ) {
 
 void dequeue(struct command *cmd) {
     jid_rm = atoi(cmd->buf);
-
     if (current && current->jid == jid_rm) {
         printf("terminate current job\n");
+        DEBUG("sending kill");
         kill(current->pid, SIGKILL);
+        DEBUG("destructing current");
         job_destruct( current );
+        current = NULL;
     } else {
         remove_if(wait_q, (int (*)(void *))to_remove );
     }

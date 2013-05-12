@@ -67,7 +67,6 @@ void job_destruct( jobinfo job ) {
     }
     free(job->argv);
     free(job);
-    job = NULL;
 }
 #define JOB_COMP_FUN        (int (*)(void*, void*))job_compare
 #define JOB_DESTRUCT_FUN    (void (*)(void*))job_destruct
