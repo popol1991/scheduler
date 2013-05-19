@@ -20,4 +20,4 @@ debug: CC += -g
 debug: scheduler enq deq stat
 
 clean:
-	rm enq scheduler deq stat
+	rm enq scheduler deq stat *.o

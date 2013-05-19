@@ -6,7 +6,7 @@
 #include "def.h"
 #include "heap.h"
 
-int fifo;
+int fifo, statfifo;
 jid_t jid_rm, job_id = 0;
 int siginfo = 1;
 jobinfo current = NULL;
@@ -32,10 +32,13 @@ int main() {
     struct sigaction newact, oldact1, oldact2;
 
     // make and open fifo
-    if ( stat(CMD_FIFO, &statbuf) == 0) 
+    if ( stat(CMD_FIFO, &statbuf) == 0 ) 
         ERRORIF( remove(CMD_FIFO) < 0, "remove failed" );
     ERRORIF( mkfifo(CMD_FIFO, 0666) < 0, "mkfifo failed" );
     ERRORIF( (fifo = open(CMD_FIFO, O_RDONLY | O_NONBLOCK)) < 0, "open fifo failed" );
+    if ( stat(STAT_FIFO, &statbuf) == 0 )
+        ERRORIF( remove(STAT_FIFO) < 0, "remove failed" );
+    ERRORIF( mkfifo(STAT_FIFO, 0666) < 0, "mkfifo failed" );
 
     // register signals
     newact.sa_sigaction = sig_handler;
@@ -109,7 +112,6 @@ void schedule() {
     }
 #endif
     if (cmd.info & TYPE_ENQ) {
-        DEBUG("enqueue");
         enqueue( &cmd );
     } else if (cmd.info & TYPE_DEQ) {
         dequeue( &cmd );
@@ -144,8 +146,6 @@ void job_switch() {
         current = NULL;
     }
 
-    if (current == NULL)
-        DEBUG("current is NULL");
     if ( size(wait_q) > 0 && (current == NULL || current->current_pri < ((jobinfo) peek(wait_q))->current_pri) ) {
         next = (jobinfo) pop(wait_q);
     } else {
@@ -165,7 +165,6 @@ void job_switch() {
 
     current = next;
     current->state = STATE_RUNNING;
-    printf("send SIGCONT to pid: %d\n", current->pid);
     kill(current->pid, SIGCONT);
 
 }
@@ -213,10 +212,8 @@ void enqueue(struct command *cmd) {
 
     ERRORIF( (pid = fork()) < 0, "enq fork failed" );
     if (pid == 0) {
-        DEBUG("child process begin");
         kill(getppid(), SIGUSR1);
         raise(SIGSTOP);
-        DEBUG("child process continue");
         if ( execvp(job->argv[0], job->argv) == -1 ) {
             printf("exec failed");
             printf("errno: %d\n", errno);
@@ -225,7 +222,6 @@ void enqueue(struct command *cmd) {
     } else {
         while (!child_start) ;
         job->pid = pid;
-        printf("pid: %d\n", job->pid);
     }
 }
 
@@ -240,9 +236,7 @@ void dequeue(struct command *cmd) {
     jid_rm = atoi(cmd->buf);
     if (current && current->jid == jid_rm) {
         printf("terminate current job\n");
-        DEBUG("sending kill");
         kill(current->pid, SIGKILL);
-        DEBUG("destructing current");
         job_destruct( current );
         current = NULL;
     } else {
@@ -251,23 +245,14 @@ void dequeue(struct command *cmd) {
 }
 
 void print_job(jobinfo job) {
-    char time[BUFLEN];
-    strcpy(time, ctime(&(job->create_time)));
-    time[strlen(time) - 1] = '\0';
-    printf("%d\t%d\t%d\t%d\t%d\t%s\t%s\n", 
-            job->jid,
-            job->pid,
-            job->owner,
-            job->run_time,
-            job->wait_time, 
-            time,
-            job->state & STATE_RUNNING ? "RUNNING" : "READY"
-          );
+    ERRORIF( write(statfifo, job, sizeof(struct jobinfo)) < 0, "stat write failed");
 }
 
 void show_stat() {
-    printf("JOBID\tPID\tOWNER\tRUNTIME\tWAITTIME\tCREATTIME\t\tSTATE\n");
+    struct stat statbuf;
+    ERRORIF( (statfifo = open(STAT_FIFO, O_WRONLY)) < 0, "open fifo failed" );
     if (current) 
         print_job(current);
     traverse(wait_q, (void (*)(void*))print_job);
+    close(statfifo);
 }

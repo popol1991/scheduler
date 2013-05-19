@@ -11,12 +11,12 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define DEBUG_INFO
 #define DEBUG(msg)          printf("%s\n", msg);
 #define ERRORIF(exp, msg)   if (exp) { printf("%s\n", msg); exit(1); }
 
 
 #define CMD_FIFO            "buf"
+#define STAT_FIFO           "statbuf"
 
 #define STATE_READY         1
 #define STATE_RUNNING       2
